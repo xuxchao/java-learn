@@ -1,0 +1,17 @@
+# 构建产物
+target/
+**/target/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.classpath
+.project
+
+# WorkBuddy 内部数据（非工程源码）
+.workbuddy/
+
+# 系统
+.DS_Store
+Thumbs.db
