@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.RedisTemplate;
 
 import javax.sql.DataSource;
@@ -36,8 +37,9 @@ class InfraConnectionTest {
 
     @Test
     void redis_connects() {
-        String pong = redisTemplate.getConnectionFactory().getConnection().ping();
-        assertTrue("PONG".equalsIgnoreCase(pong));
+        try (RedisConnection connection = redisTemplate.getConnectionFactory().getConnection()) {
+            assertTrue("PONG".equalsIgnoreCase(connection.ping()));
+        }
     }
 
     @Test
