@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 默认禁用：运行前需先 `docker compose up -d` 拉起三个服务。
  * 启用方式：去掉 @Disabled，或 `mvn test -Dtest=InfraConnectionTest`。
  */
-@org.junit.jupiter.api.Disabled("运行前需先 `docker compose up -d` 拉起 MySQL/Redis/RabbitMQ")
+// @org.junit.jupiter.api.Disabled("运行前需先 `docker compose up -d` 拉起 MySQL/Redis/RabbitMQ")
 @SpringBootTest
 class InfraConnectionTest {
 
