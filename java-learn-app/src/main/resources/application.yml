@@ -2,7 +2,7 @@ spring:
   application:
     name: java-learn-app
 
-  # ---- MySQL（M3 正式接入；M1 仅用于验证连接） ----
+  # ---- MySQL（M3 正式接入；M1 仅用于验证连接；M2 用 schema.sql 建 users 表） ----
   datasource:
     url: jdbc:mysql://localhost:3306/ecommerce?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: root
@@ -23,6 +23,17 @@ spring:
     port: 5672
     username: guest
     password: guest
+
+  # ---- SQL 初始化：每次启动用 classpath:schema.sql 幂等建表（M2 的 users 表） ----
+  sql:
+    init:
+      mode: always
+
+# ---- JWT（M2 鉴权）自定义配置 ----
+# 生产环境务必改为随机长密钥并通过环境变量注入，不要硬编码在仓库里
+jwt:
+  secret: "java-learn-m2-secret-key-change-me-0123456789abcdefghijklmnopqrstuvwxyz"
+  expiration-ms: 3600000   # Token 有效期：1 小时
 
 server:
   port: 8080

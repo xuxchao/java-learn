@@ -15,7 +15,13 @@ public enum ErrorCode {
 
     SUCCESS(0, "成功"),
     SYSTEM_ERROR(500, "系统异常"),
-    DEMO_BROKEN(1001, "演示用的故意异常");
+    DEMO_BROKEN(1001, "演示用的故意异常"),
+
+    // 2xxx 用户/鉴权（M2）
+    USERNAME_ALREADY_EXISTS(2001, "用户名已存在"),
+    INVALID_CREDENTIALS(2002, "用户名或密码错误"),
+    UNAUTHORIZED(2003, "未登录或登录已过期"),
+    FORBIDDEN(2004, "无权访问该资源");
 
     private final int code;
     private final String message;
