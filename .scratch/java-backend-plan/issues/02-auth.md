@@ -69,8 +69,13 @@ ADMIN_TOKEN=$(curl -s -X POST localhost:8080/auth/login -H 'Content-Type: applic
   -d '{"username":"boss","password":"123456"}' | sed -E 's/.*"data":"([^"]+)".*/\1/')
 curl localhost:8080/admin/panel -H "Authorization: Bearer $ADMIN_TOKEN"
 
-# 7. 跑单测（无需 Docker，覆盖 JWT/注册登录/拦截器）
+# 7. 跑测试
+#    M2 新增的 JwtUtilTest / AuthServiceTest / LoginInterceptorTest 是纯单测，不依赖任何中间件；
+#    但 M1 遗留的 InfraConnectionTest 是 @SpringBootTest，需要 docker-compose 的
+#    MySQL/Redis/RabbitMQ 处于运行状态，否则整个 mvn test 会失败。
 mvn test
 ```
 
-> 注：本仓库在沙箱中无 JDK/Maven，无法在此编译运行；以上工程经人工校验结构/版本正确，请在本机按上述步骤验证。
+> 验证记录（2026-08-03）：已在本机 JDK 17.0.20 + Maven 3.9.16 下执行 `mvn test`，
+> 结果 `BUILD SUCCESS`，`Tests run: 18, Failures: 0, Errors: 0, Skipped: 0`
+> （DemoControllerTest 2 / InfraConnectionTest 3 / JwtUtilTest 3 / LoginInterceptorTest 6 / AuthServiceTest 4）。

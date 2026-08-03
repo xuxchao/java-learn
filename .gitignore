@@ -12,6 +12,9 @@ target/
 # WorkBuddy 内部数据（非工程源码）
 .workbuddy/
 
+# 本地环境辅助脚本（含机器相关的绝对路径，不入库）
+.mvnlocal.sh
+
 # 系统
 .DS_Store
 Thumbs.db

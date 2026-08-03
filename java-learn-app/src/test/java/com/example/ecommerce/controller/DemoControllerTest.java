@@ -1,5 +1,6 @@
 package com.example.ecommerce.controller;
 
+import com.example.ecommerce.security.JwtUtil;
 import com.example.ecommerce.service.DemoService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +21,15 @@ class DemoControllerTest {
 
     @MockBean
     private DemoService demoService;
+
+    /**
+     * @WebMvcTest 只装配 Web 层 Bean（Controller / ControllerAdvice / WebMvcConfigurer /
+     * HandlerInterceptor 等），因此 WebConfig 与 LoginInterceptor 会被加载，
+     * 但它们依赖的普通 @Component（JwtUtil）不在切片范围内 —— 必须在此 mock 掉，
+     * 否则上下文启动会报 "No qualifying bean of type JwtUtil"。
+     */
+    @MockBean
+    private JwtUtil jwtUtil;
 
     @Test
     void hello_returns_success_body() throws Exception {
