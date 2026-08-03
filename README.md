@@ -30,3 +30,14 @@
 3. /user/me: 属于被 LoginInterceptor.java 拦截的接口。规则配置在 WebConfig.java 中，WebConfig.java 会被直接注入。LoginInterceptor.java 包含了 role 的判断和 token 的解析
 4. /admin/panel：用来验证角色权限问题
 > 注意: LoginInterceptor.java 中可以直接使用 LoginUser.java，是因为他俩都属于同一个包中，并且同级，因此可以不 import 直接使用。另外 schema.sql 
+
+# 03-product-db.md
+
+1. /products (GET)：商品列表，MyBatis-Plus 的 `selectList` 零 XML 查询
+2. /products (POST)：新建商品；/products/{id} (GET/PUT/DELETE)：详情/改/删
+3. /products/{id}/stock (POST)：为该商品初始化库存（available = total），库存行带 `version` 字段做乐观锁
+4. /products/{id}/order (POST)：下单并扣库存，默认乐观锁；请求体传 `"lockType":"PESSIMISTIC"` 走 `SELECT ... FOR UPDATE` 悲观锁。下单逻辑在 `@Transactional` 内完成「查库存→扣减→插订单」
+> 注意：MyBatis-Plus 的 `@Version` 乐观锁依赖 `MybatisPlusConfig` 里的 `OptimisticLockerInnerInterceptor`，
+> 且 update 时框架会自动把 `version` 拼进 WHERE 并自增；命中 0 行即代表并发冲突（抛 STOCK_CONFLICT）。
+> 另外 `mybatis-plus-boot-starter` 会把 `mybatis-spring` 锁成 2.1.2（Spring Boot 2 线），与 SB3 的 Spring 6.1
+> 不兼容，已在 app pom 显式覆盖为 3.0.4。

@@ -72,6 +72,21 @@
             <artifactId>spring-security-crypto</artifactId>
             <version>6.3.4</version>
         </dependency>
+
+        <!-- M3 商品&数据库持久化：MyBatis-Plus（3.5.3+ 已支持 Spring Boot 3） -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-boot-starter</artifactId>
+            <version>3.5.17</version>
+        </dependency>
+        <!-- 注意：mybatis-plus-boot-starter 的 BOM 把 mybatis-spring 锁在 2.1.2（SB2 线），
+             与 Spring Boot 3 的 Spring 6.1 不兼容（factoryBeanObjectType 类型错误，上下文起不来）。
+             显式覆盖为 3.0.4（SB3 线，修复了该兼容问题）。 -->
+        <dependency>
+            <groupId>org.mybatis</groupId>
+            <artifactId>mybatis-spring</artifactId>
+            <version>3.0.4</version>
+        </dependency>
     </dependencies>
 
     <build>

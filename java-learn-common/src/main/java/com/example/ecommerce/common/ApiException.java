@@ -13,6 +13,11 @@ public class ApiException extends RuntimeException {
         this.code = errorCode.getCode();
     }
 
+    public ApiException(ErrorCode errorCode, String message) {
+        super(message);
+        this.code = errorCode.getCode();
+    }
+
     public ApiException(int code, String message) {
         super(message);
         this.code = code;

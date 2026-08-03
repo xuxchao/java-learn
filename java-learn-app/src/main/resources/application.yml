@@ -24,10 +24,20 @@ spring:
     username: guest
     password: guest
 
-  # ---- SQL 初始化：每次启动用 classpath:schema.sql 幂等建表（M2 的 users 表） ----
+  # ---- SQL 初始化：每次启动用 classpath:schema.sql 幂等建表（M2 的 users 表 + M3 的 products/stock/orders） ----
   sql:
     init:
       mode: always
+
+# ---- MyBatis-Plus（M3）：主键自增、下划线转驼峰、SQL 日志便于观察 EXPLAIN 验证 ----
+mybatis-plus:
+  global-config:
+    db-config:
+      id-type: auto            # 配合 MySQL AUTO_INCREMENT
+      table-underline: true
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
 # ---- JWT（M2 鉴权）自定义配置 ----
 # 生产环境务必改为随机长密钥并通过环境变量注入，不要硬编码在仓库里
