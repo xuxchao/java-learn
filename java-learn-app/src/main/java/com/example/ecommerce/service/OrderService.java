@@ -26,9 +26,9 @@ import java.util.concurrent.ThreadLocalRandom;
  *   4. 生成订单（order_no 唯一，作为后续幂等键）
  * </pre>
  *
- * 隔离级别：Spring 默认沿用 MySQL 的 REPEATABLE READ，配合行锁/版本号解决并发扣减。
- * 乐观锁路径：updateById 由 MyBatis-Plus 自动带上 {@code version} 条件，
- * 命中 0 行即说明并发期间该行已被他人改动——调用方应重试或向用户提示冲突。
+ * 隔离级别：Spring 默认沿用 MySQL 的 REPEATABLE READ。
+ * 乐观锁路径：用单条原子 SQL 完成 CAS（Compare-And-Swap）——"比较 available &gt;= 数量 并原子扣减"，
+ * 不依赖版本号字段；命中 0 行即说明并发期间该行已被他人改动，调用方应重试。
  */
 @Service
 public class OrderService {
@@ -62,8 +62,10 @@ public class OrderService {
     }
 
     /**
-     * 乐观锁路径：先读后写，靠 version 字段兜底。
-     * 若两次读取之间该行被别的事务改过，updateById 命中 0 行 → 抛 STOCK_CONFLICT。
+     * CAS 乐观锁路径：不依赖任何版本号字段，用单条原子 SQL 完成
+     * "比较可用量 + 扣减"（Compare-And-Swap）。
+     * 若读取时可用量已不足 → STOCK_NOT_ENOUGH；若读取时尚足、但 UPDATE 命中 0 行
+     * （并发期间被其他事务消耗）→ STOCK_CONFLICT，调用方应重试。
      */
     @Transactional
     public Order placeOrderOptimistic(Long userId, Product product, int quantity, BigDecimal amount) {
@@ -74,8 +76,8 @@ public class OrderService {
         if (stock.getAvailable() < quantity) {
             throw new ApiException(ErrorCode.STOCK_NOT_ENOUGH);
         }
-        stock.setAvailable(stock.getAvailable() - quantity);
-        int affected = stockMapper.updateById(stock);   // WHERE id=? AND version=?
+        // CAS：原子比较 available >= quantity 并扣减，彻底消除"先读后写"的竞态窗口
+        int affected = stockMapper.decreaseAvailable(stock.getId(), quantity);
         if (affected == 0) {
             throw new ApiException(ErrorCode.STOCK_CONFLICT, "库存并发冲突，请重试");
         }
@@ -85,6 +87,7 @@ public class OrderService {
     /**
      * 悲观锁路径：以 {@code SELECT ... FOR UPDATE} 在事务内锁定库存行，
      * 直到本事务提交才释放，期间其它事务无法修改该行——绝对不会冲突，但并发度低。
+     * 扣减同样走 CAS 原子 SQL（行已锁，必然命中 1 行）。
      */
     @Transactional
     public Order placeOrderPessimistic(Long userId, Product product, int quantity, BigDecimal amount) {
@@ -95,8 +98,10 @@ public class OrderService {
         if (stock.getAvailable() < quantity) {
             throw new ApiException(ErrorCode.STOCK_NOT_ENOUGH);
         }
-        stock.setAvailable(stock.getAvailable() - quantity);
-        stockMapper.updateById(stock);   // 行已锁，无需 version
+        int affected = stockMapper.decreaseAvailable(stock.getId(), quantity);
+        if (affected == 0) {
+            throw new ApiException(ErrorCode.STOCK_NOT_ENOUGH, "悲观锁下不应发生：行已被锁定");
+        }
         return insertOrder(userId, product, quantity, amount);
     }
 

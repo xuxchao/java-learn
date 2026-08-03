@@ -91,11 +91,11 @@ node scripts/db-reset.mjs --drop --yes # 连表结构一起删，之后重启应
 
 # 03-product-db.md
 
-1. /products (GET)：商品列表，MyBatis-Plus 的 `selectList` 零 XML 查询
-2. /products (POST)：新建商品；/products/{id} (GET/PUT/DELETE)：详情/改/删
-3. /products/{id}/stock (POST)：为该商品初始化库存（available = total），库存行带 `version` 字段做乐观锁
-4. /products/{id}/order (POST)：下单并扣库存，默认乐观锁；请求体传 `"lockType":"PESSIMISTIC"` 走 `SELECT ... FOR UPDATE` 悲观锁。下单逻辑在 `@Transactional` 内完成「查库存→扣减→插订单」
-> 注意：MyBatis-Plus 的 `@Version` 乐观锁依赖 `MybatisPlusConfig` 里的 `OptimisticLockerInnerInterceptor`，
-> 且 update 时框架会自动把 `version` 拼进 WHERE 并自增；命中 0 行即代表并发冲突（抛 STOCK_CONFLICT）。
-> 另外 `mybatis-plus-boot-starter` 会把 `mybatis-spring` 锁成 2.1.2（Spring Boot 2 线），与 SB3 的 Spring 6.1
-> 不兼容，已在 app pom 显式覆盖为 3.0.4。
+1. VERSION 乐观锁
+    我感觉不会发生数据冲突的情况，因此大家都可以先 select 拿到 version1。再 update 的时候在校验是否还是 version1。是就正常执行，不是就失败。我添加了 bench-optimistic.mjs 并发测试文件。大概是一件商品 30 个库存，100 个人并发争抢。结果大概是会有 10-11 个人成功，89-90 个人并发失败，此时库存没有消耗干净。这个数量我分析了一下是因为连接池大概是 10 个。每次十个算一批，因此成功率是 10%。加入重试机制之后库存都消耗成功，但是他消耗了更多的请求次数和整体耗时。
+2. CAS 乐观锁 
+    这是典型的适合去库存的场景，不再用 version 来判断是否并发请求了，而是改用库存数量。这样只要有库存即使并发了也不要紧，只要库存充足就会成功。是测试下来最理想的情况
+3. 悲观锁 
+    他跟乐观锁的区别是，在 select 拿到 version1 的这一步就阻止了另外一个人再继续执行这个，因此他自始至终到 update 都会成功。劣势就是不能够并行 select。因此耗时会增加不少
+
+    

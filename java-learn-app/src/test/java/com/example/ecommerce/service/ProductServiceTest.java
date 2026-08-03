@@ -77,7 +77,6 @@ class ProductServiceTest {
         Stock stock = productService.initStock(1L, 10);
         assertEquals(10, stock.getTotal());
         assertEquals(10, stock.getAvailable());
-        assertEquals(0, stock.getVersion());
     }
 
     @Test

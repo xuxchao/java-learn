@@ -45,8 +45,8 @@ export function parseArgs(argv) {
 
   return {
     base: (val('base', process.env.BASE || 'http://localhost:8080')).replace(/\/+$/, ''),
-    stock: Number(val('stock', 30)),
-    users: Number(val('users', 100)),
+    stock: Number(val('stock', 300)),
+    users: Number(val('users', 1000)),
     qty: Number(val('qty', 1)),
     retry: Number(val('retry', 0)),   // 乐观锁客户端重试次数（悲观锁用不上）
     noWarmup: flag('no-warmup'),

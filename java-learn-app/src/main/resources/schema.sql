@@ -21,13 +21,13 @@ CREATE TABLE IF NOT EXISTS products (
     KEY idx_products_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- M3 库存表。与商品一对一并通过 product_id 唯一关联；version 字段用于 MyBatis-Plus @Version 乐观锁。
+-- M3 库存表。与商品一对一并通过 product_id 唯一关联。
+-- 扣库存采用 CAS 乐观锁：单条 SQL 内 "比较 available >= 数量 并原子扣减"，不再使用 version 版本号字段。
 CREATE TABLE IF NOT EXISTS stock (
     id          BIGINT    NOT NULL AUTO_INCREMENT,
     product_id  BIGINT    NOT NULL,
     total       INT       NOT NULL DEFAULT 0,
     available   INT       NOT NULL DEFAULT 0,
-    version     INT       NOT NULL DEFAULT 0,
     created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),

@@ -4,18 +4,18 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.baomidou.mybatisplus.annotation.Version;
 
 import java.time.LocalDateTime;
 
 /**
  * 库存实体（M3）。对应 {@code stock} 表，与商品一对一（product_id 唯一）。
  *
- * <p>{@link Version} 标注的 {@code version} 字段是乐观锁核心：MyBatis-Plus 在执行 update 时，
- * 会自动把 {@code version} 拼进 WHERE 条件并自增。并发场景下若两事务同时改同一行，
- * 后提交的事务因版本号已变导致 WHERE 命中 0 行，从而避免"丢失更新"。
+ * <p>扣库存采用 CAS（Compare-And-Swap）乐观锁：下单时在单条 SQL 中
+ * "比较 available &gt;= 数量 并原子扣减"（{@code UPDATE stock SET available = available - ? WHERE id = ? AND available &gt;= ?}），
+ * 不依赖任何版本号字段，从根本上消除了"先读后写"的丢失更新窗口。
  *
- * <p>测试要点：updateById 返回 affectedRows==0 即代表乐观锁冲突，应重试或抛错。
+ * <p>这与早期基于 {@code @Version} 版本号的乐观锁不同——CAS 直接对业务值做原子 compare-and-set，
+ * 并发冲突率显著更低（两条并发请求各自独立原子扣减，互不覆盖），且无需重试放大请求量。
  */
 @TableName("stock")
 public class Stock {
@@ -28,9 +28,6 @@ public class Stock {
     private Integer total;
 
     private Integer available;
-
-    @Version
-    private Integer version;
 
     @TableField(value = "created_at", insertStrategy = com.baomidou.mybatisplus.annotation.FieldStrategy.NOT_NULL,
             updateStrategy = com.baomidou.mybatisplus.annotation.FieldStrategy.NOT_NULL)
@@ -47,7 +44,6 @@ public class Stock {
         this.productId = productId;
         this.total = total;
         this.available = available;
-        this.version = 0;
     }
 
     public Long getId() {
@@ -80,14 +76,6 @@ public class Stock {
 
     public void setAvailable(Integer available) {
         this.available = available;
-    }
-
-    public Integer getVersion() {
-        return version;
-    }
-
-    public void setVersion(Integer version) {
-        this.version = version;
     }
 
     public LocalDateTime getCreatedAt() {

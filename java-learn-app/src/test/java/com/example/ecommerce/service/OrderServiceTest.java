@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -22,8 +23,8 @@ import static org.mockito.Mockito.when;
 /**
  * OrderService 单元测试：mock 三个 Mapper，不连库。
  * 重点验证 M3 的并发控制两条路径：
- *   - 乐观锁：updateById 命中 0 行 → 抛 STOCK_CONFLICT；
- *   - 悲观锁：先 FOR UPDATE 锁行再扣减，无需版本号。
+ *   - 乐观锁（CAS）：decreaseAvailable 命中 0 行 → 抛 STOCK_CONFLICT；
+ *   - 悲观锁：先 FOR UPDATE 锁行再 CAS 扣减，行已锁必然命中 1 行。
  * 以及库存不足、商品不存在等前置校验。
  */
 class OrderServiceTest {
@@ -46,7 +47,7 @@ class OrderServiceTest {
         Stock stock = new Stock(1L, 5, 5);
         stock.setId(100L);
         when(stockMapper.selectByProductId(1L)).thenReturn(stock);
-        when(stockMapper.updateById(any(Stock.class))).thenReturn(1);  // 乐观锁命中
+        when(stockMapper.decreaseAvailable(any(), anyInt())).thenReturn(1);  // CAS 命中 1 行
 
         Order order = orderService.placeOrder(7L, 1L, 2, LockType.OPTIMISTIC);
 
@@ -61,7 +62,7 @@ class OrderServiceTest {
         Stock stock = new Stock(1L, 5, 5);
         stock.setId(100L);
         when(stockMapper.selectByProductId(1L)).thenReturn(stock);
-        when(stockMapper.updateById(any(Stock.class))).thenReturn(0);  // 并发期间版本已变
+        when(stockMapper.decreaseAvailable(any(), anyInt())).thenReturn(0);  // 并发期间可用量已被消耗
 
         ApiException ex = assertThrows(ApiException.class,
                 () -> orderService.placeOrder(7L, 1L, 2, LockType.OPTIMISTIC));
@@ -76,11 +77,12 @@ class OrderServiceTest {
         Stock stock = new Stock(1L, 5, 5);
         stock.setId(100L);
         when(stockMapper.selectByProductIdForUpdate(1L)).thenReturn(stock);
-        when(stockMapper.updateById(any(Stock.class))).thenReturn(1);
+        when(stockMapper.decreaseAvailable(any(), anyInt())).thenReturn(1);
 
         Order order = orderService.placeOrder(7L, 1L, 3, LockType.PESSIMISTIC);
 
         verify(stockMapper).selectByProductIdForUpdate(1L);
+        verify(stockMapper).decreaseAvailable(any(), anyInt());
         verify(orderMapper).insert(any(Order.class));
         assertEquals(3, order.getQuantity());
     }

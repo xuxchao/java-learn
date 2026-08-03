@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  * 每个用例用 {@code @Transactional} 包裹，方法结束自动回滚，互不污染。
  *
  * <p>验证三项 M3 核心能力：
- *  1. 下单扣库存（乐观锁）：库存扣减正确、version 自增、订单金额 = 单价 × 数量；
+ *  1. 下单扣库存（CAS 乐观锁）：库存扣减正确、订单金额 = 单价 × 数量；
  *  2. 下单扣库存（悲观锁 FOR UPDATE）：同样正确扣减；
  *  3. EXPLAIN 验证索引：精确匹配走 idx_products_name，对列做函数运算导致索引失效。
  */
@@ -45,15 +45,14 @@ class ProductDbIntegrationTest {
 
     @Test
     @org.springframework.transaction.annotation.Transactional
-    void placeOrder_optimistic_deducts_stock_and_bumps_version() {
+    void placeOrder_optimistic_deducts_stock_via_cas() {
         Product p = productService.createProduct("iPhone15", new BigDecimal("100.00"), "desc");
         productService.initStock(p.getId(), 10);
 
         Order order = orderService.placeOrder(1L, p.getId(), 3, LockType.OPTIMISTIC);
 
         Stock after = stockMapper.selectByProductId(p.getId());
-        assertEquals(7, after.getAvailable(), "乐观锁下单后可用库存应为 10-3=7");
-        assertEquals(1, after.getVersion(), "乐观锁下单后 version 应自增为 1");
+        assertEquals(7, after.getAvailable(), "CAS 乐观锁下单后可用库存应为 10-3=7");
         assertEquals(3, order.getQuantity());
         assertEquals(new BigDecimal("300.00"), order.getAmount());
         assertNotNull(order.getOrderNo());
