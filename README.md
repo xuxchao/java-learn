@@ -15,6 +15,22 @@
   `node scripts/api-smoke.mjs`（Node ≥ 18，用内置 fetch，零依赖不用 npm install；全部断言通过退出码为 0）
 - 单条 curl 速查（可直接复制）：见 [docs/api/curl.md](docs/api/curl.md)
 
+# 清库
+
+造完测试数据想回到干净状态时用（只要 mysql 容器在跑就行，不用装 mysql 客户端）：
+
+```bash
+node scripts/db-reset.mjs              # 交互确认后清空所有表（保留表结构，自增 ID 归 1）
+node scripts/db-reset.mjs --yes        # 跳过确认
+node scripts/db-reset.mjs --dry-run    # 只看会执行哪些 SQL，不落库
+node scripts/db-reset.mjs --tables orders,stock --yes   # 只清指定表
+node scripts/db-reset.mjs --drop --yes # 连表结构一起删，之后重启应用由 schema.sql 重建
+```
+
+> 排查提示：`TRUNCATE` 之后直接查 `information_schema.tables` 的 `AUTO_INCREMENT` / `TABLE_ROWS`
+> 会看到**旧值**——MySQL 8.0 默认 `information_schema_stats_expiry=86400`，统计信息缓存 24 小时。
+> 要拿实时值得先 `SET SESSION information_schema_stats_expiry=0;`，或者直接 `SELECT COUNT(*)`。
+
 # 01-scaffold-and-local-infra.md
 
 这个任务跑完了解了 Spring boot 的入口文件(EcommerceApplication.java)，代码组织方式，扫描方式，以及 resources 的作用。
