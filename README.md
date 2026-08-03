@@ -9,6 +9,12 @@
 1. mvn test
 2. mvn test -Dtest=InfraConnectionTest // 只执行 InfraConnectionTest 这一个测试文件
 
+# 手工调接口
+
+- 一键跑通全流程（注册 → 登录拿 token → 商品 CRUD → 初始化库存 → 乐观/悲观锁下单 → 错误码 → 并发抢购）：
+  `bash scripts/api-smoke.sh`
+- 单条 curl 速查（可直接复制）：见 [docs/api/curl.md](docs/api/curl.md)
+
 # 01-scaffold-and-local-infra.md
 
 这个任务跑完了解了 Spring boot 的入口文件(EcommerceApplication.java)，代码组织方式，扫描方式，以及 resources 的作用。
