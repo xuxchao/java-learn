@@ -15,7 +15,9 @@ sh .mvnlocal.sh -B install -DskipTests
 cd java-learn-app && sh ../.mvnlocal.sh -B spring-boot:run
 ```
 
-一键跑通全流程可直接执行：`bash scripts/api-smoke.sh`
+一键跑通全流程可直接执行：`node scripts/api-smoke.mjs`
+（Node ≥ 18，内置 fetch，零 npm 依赖；带断言，全过则退出码 0，可直接接进 CI。
+支持 `node scripts/api-smoke.mjs --base http://127.0.0.1:9090` 换地址。）
 
 ---
 

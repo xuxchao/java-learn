@@ -12,7 +12,7 @@
 # 手工调接口
 
 - 一键跑通全流程（注册 → 登录拿 token → 商品 CRUD → 初始化库存 → 乐观/悲观锁下单 → 错误码 → 并发抢购）：
-  `bash scripts/api-smoke.sh`
+  `node scripts/api-smoke.mjs`（Node ≥ 18，用内置 fetch，零依赖不用 npm install；全部断言通过退出码为 0）
 - 单条 curl 速查（可直接复制）：见 [docs/api/curl.md](docs/api/curl.md)
 
 # 01-scaffold-and-local-infra.md
