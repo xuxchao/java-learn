@@ -156,7 +156,7 @@ async function main() {
   step(`10. 查库存 GET /products/${pid}/stock`);
   const stock = await call('GET', `/products/${pid}/stock`);
   assert('库存扣减正确 available=10-2-3=5', stock.data?.available === 5, `实到 ${stock.data?.available}`);
-  assert('乐观锁 version 自增到 2', stock.data?.version === 2, `实到 ${stock.data?.version}`);
+  assert('扣减量=5（available = total - 5）', stock.data?.available === stock.data?.total - 5, `available=${stock.data?.available} total=${stock.data?.total}`);
 
   // 4. 错误码 ----------------------------------------------------------
   step('11. 错误码验证');

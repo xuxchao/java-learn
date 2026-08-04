@@ -13,7 +13,7 @@
  * 依赖：Node >= 18（内置 fetch），零 npm 依赖。
  *
  * 走的是 OrderService.placeOrderOptimistic：
- *   SELECT ... → 内存里减库存 → UPDATE ... WHERE id=? AND version=?
+ *   UPDATE stock SET available = available - ? WHERE id=? AND available >= ?（CAS 单条原子 SQL）
  * 两次读写之间该行被别人改过，UPDATE 命中 0 行 → 抛 3005 STOCK_CONFLICT。
  * 服务端不重试，所以默认跑法下大量请求会以 3005 失败——这不是 bug，
  * 而是乐观锁的固有特征：冲突检测交给数据库，冲突处理交给调用方。
@@ -23,11 +23,11 @@ import { runLockBench, gray, yellow, bold } from './lib/bench-core.mjs';
 
 await runLockBench({
   lockType: 'OPTIMISTIC',
-  title: '乐观锁抢购压测（version 版本号）',
+  title: '乐观锁抢购压测（CAS 基于库存数量）',
   note: ({ okCount, conflict, opt }) => {
     console.log(bold('结论：'));
     console.log(
-      gray('  乐观锁不加锁，冲突时靠 UPDATE ... WHERE version=? 命中 0 行来发现，因此'),
+      gray('  乐观锁不加锁，冲突时靠 UPDATE ... WHERE available >= ? 命中 0 行来发现，因此'),
     );
     console.log(gray('  单请求很快（没有等锁），但高并发下冲突率高、成功率低。'));
 

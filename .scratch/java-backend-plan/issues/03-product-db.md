@@ -7,7 +7,7 @@
 **Status:** resolved
 
 - [x] 商品表 + 库存表设计合理，MyBatis-Plus CRUD 跑通
-- [x] 下单扣库存在事务中完成，隔离级别与锁使用正确（乐观锁版本号 / 悲观锁 for update）
+- [x] 下单扣库存在事务中完成，隔离级别与锁使用正确（乐观锁 CAS / 悲观锁 for update）
 - [x] 故意制造索引失效并用 explain 验证、再修复
 - [x] 能讲清 InnoDB 索引 B+ 树、MVCC、间隙锁、乐观锁 vs 悲观锁
 
@@ -15,14 +15,14 @@
 
 ### 表结构（schema.sql，IF NOT EXISTS 幂等）
 - `products`：id / name（二级索引 `idx_products_name`，用于 EXPLAIN 验证）/ price / description / 时间戳
-- `stock`：id / product_id（唯一）/ total / available / **version（乐观锁）/ 时间戳
+- `stock`：id / product_id（唯一）/ total / available / 时间戳（不再有 version 字段，CAS 基于 available）
 - `orders`：id / order_no（唯一，后续做幂等键）/ user_id / product_id / quantity / amount / status
 
 ### 代码（java-learn-app）
-- 实体：`model/Product`、`model/Stock`（`@Version` 乐观锁）、`model/Order`（均 `@TableName` 映射）
+- 实体：`model/Product`、`model/Stock`（CAS 乐观锁，无 version 字段）、`model/Order`（均 `@TableName` 映射）
 - Mapper：`mapper/ProductMapper`、`StockMapper`（额外 `selectByProductId` / `selectByProductIdForUpdate`）、
   `OrderMapper`，全部继承 `BaseMapper`，零 XML
-- 配置：`config/MybatisPlusConfig`（@MapperScan + `OptimisticLockerInnerInterceptor` 乐观锁拦截器）
+- 配置：`config/MybatisPlusConfig`（@MapperScan + 空的 MybatisPlusInterceptor 扩展点，不再挂 OptimisticLockerInnerInterceptor）
 - 业务：`service/ProductService`（CRUD + 库存初始化）、`service/OrderService`
   （`placeOrder`，默认乐观锁，可传 `lockType=PESSIMISTIC` 走 `FOR UPDATE` 悲观锁，全程 `@Transactional`）
 - 接口：`controller/ProductController`（`/products` CRUD + `/{id}/stock` + `/{id}/order`），受登录拦截器保护
@@ -37,19 +37,19 @@
 
 1. **建表 + CRUD**：`docker compose up -d mysql` 后起应用，POST /products 建商品 → POST /products/{id}/stock 备货
    → GET /products/{id} 查回；MyBatis-Plus 通用方法已跑通。
-2. **下单扣库存（两路锁）**：POST /products/{id}/order 默认乐观锁，库存 available 减少、version 自增；
+2. **下单扣库存（两路锁）**：POST /products/{id}/order 默认乐观锁，库存 available 被单条 CAS SQL 原子扣减（不再自增 version）；
    传 `{"lockType":"PESSIMISTIC"}` 走 `SELECT ... FOR UPDATE` 行锁，同样正确扣减。
 3. **EXPLAIN 索引验证**（见 `ProductDbIntegrationTest.explain_index_used_for_exact_match_but_not_for_function`）：
    - 好查询 `WHERE name = 'x'` → `key = idx_products_name`（走索引）
    - 坏查询 `WHERE LEFT(name,1) = 'i'`（对列套函数）→ `key = NULL`、`type = ALL`（索引失效）
    - 修复方式：避免在索引列上做函数运算，或建函数索引 / 改写为前缀匹配。
-4. **事务正确性**：下单逻辑在 `@Transactional` 内完成「查库存 → 扣减 → 插订单」，乐观锁冲突时 `updateById`
+4. **事务正确性**：下单逻辑在 `@Transactional` 内完成「查库存 → 扣减 → 插订单」，乐观锁冲突时 `decreaseAvailable`（CAS）
    命中 0 行抛 `STOCK_CONFLICT`，保证不超卖、不丢更新。
 
 ## 面试八股自测（要能口述）
 - InnoDB 索引是 **B+ 树**（矮胖、叶子链表、聚簇索引即主键序），回表、覆盖索引、最左前缀。
 - **MVCC**： undo log + 隐藏事务 id/回滚指针 + ReadView，实现快照读、可重复读不阻塞读写。
-- **间隙锁 / Next-Key Lock**：RR 下防幻读，锁住记录+间隙；这也是为什么 `FOR UPDATE` 能挡并发插入。
-- **乐观锁 vs 悲观锁**：乐观锁（version/ CAS）适合冲突少、高并发读，冲突时重试；悲观锁（`FOR UPDATE`）
+- **间隙锁 / Next-Key Lock**：RR 下默认加 next-key lock（记录锁+间隙锁）防幻读；但本项目的 `FOR UPDATE` 命中 `uk_stock_product` 唯一索引**等值且记录存在**，会退化成 record lock、不加间隙锁，因此当前代码路径并不会挡并发插入。要演示间隙锁需走范围查询（如 `idx_orders_user`）或查不存在的记录。
+- **乐观锁 vs 悲观锁**：乐观锁（CAS：基于库存数量做原子扣减）适合冲突少、高并发读，冲突时重试；悲观锁（`FOR UPDATE`）
   适合冲突多、强一致，但锁等待降低吞吐。两者都建立在事务隔离级别之上。
 

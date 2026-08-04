@@ -19,7 +19,7 @@ import java.util.List;
  * insert / updateById / deleteById），演示"零 XML"的持久化写法。
  *
  * <p>约定：创建商品与初始化库存分开——商品建好后通过 {@link #initStock} 单独建库存行，
- * 这样库存的并发语义（乐观锁版本号）更清晰，也贴近真实电商"商品上架 + 备货"两步。
+ * 这样库存的并发语义（CAS 乐观锁，基于库存数量）更清晰，也贴近真实电商"商品上架 + 备货"两步。
  */
 @Service
 public class ProductService {

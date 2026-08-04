@@ -22,7 +22,7 @@ import java.util.concurrent.ThreadLocalRandom;
  * <pre>
  *   1. 查商品算金额（amount = price * quantity）
  *   2. 查库存并校验可用量
- *   3. 扣减库存（乐观锁 version / 悲观锁 for update 二选一）
+ *   3. 扣减库存（乐观锁 CAS / 悲观锁 for update 二选一）
  *   4. 生成订单（order_no 唯一，作为后续幂等键）
  * </pre>
  *

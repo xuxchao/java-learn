@@ -45,8 +45,8 @@ export function parseArgs(argv) {
 
   return {
     base: (val('base', process.env.BASE || 'http://localhost:8080')).replace(/\/+$/, ''),
-    stock: Number(val('stock', 300)),
-    users: Number(val('users', 1000)),
+    stock: Number(val('stock', 30)),
+    users: Number(val('users', 100)),
     qty: Number(val('qty', 1)),
     retry: Number(val('retry', 0)),   // 乐观锁客户端重试次数（悲观锁用不上）
     noWarmup: flag('no-warmup'),
@@ -345,8 +345,7 @@ export async function runLockBench({ lockType, title, note }) {
   step('一致性校验');
   const stockNow = await api('GET', `/products/${pid}/stock`);
   const available = stockNow.data?.available;
-  const version = stockNow.data?.version;
-  console.log(`  ${gray(`最终库存：available=${available}  version=${version}`)}`);
+  console.log(`  ${gray(`最终库存：available=${available}`)}`);
 
   const failures = [];
   const check = (desc, ok, detail = '') => {

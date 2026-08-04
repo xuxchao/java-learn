@@ -134,7 +134,7 @@ curl -s -X POST http://localhost:8080/products/$PID/stock \
   -d '{"total":10}'
 ```
 
-### 查询库存（可观察 `available` 与 `version` 变化）
+### 查询库存（可观察 `available` 变化；CAS 乐观锁已无 version 字段）
 
 ```bash
 curl -s http://localhost:8080/products/$PID/stock -H "Authorization: Bearer $TOKEN"
@@ -146,7 +146,7 @@ curl -s http://localhost:8080/products/$PID/stock -H "Authorization: Bearer $TOK
 
 `lockType` 可选，缺省 `OPTIMISTIC`。
 
-### 乐观锁下单（默认，靠 `version` 字段 CAS）
+### 乐观锁下单（默认，CAS 基于库存数量）
 
 ```bash
 curl -s -X POST http://localhost:8080/products/$PID/order \
@@ -164,7 +164,7 @@ curl -s -X POST http://localhost:8080/products/$PID/order \
   -d '{"userId":1,"quantity":3,"lockType":"PESSIMISTIC"}'
 ```
 
-每次下单成功后 `stock.available` 减少、`version` +1，可用上面的查库存接口验证。
+每次下单成功后 `stock.available` 被原子扣减（CAS 单条 SQL，不再有 version 字段），可用上面的查库存接口验证。
 
 ### 并发压一把，观察乐观锁冲突（code 3005）
 

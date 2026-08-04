@@ -9,64 +9,6 @@
 1. mvn test
 2. mvn test -Dtest=InfraConnectionTest // 只执行 InfraConnectionTest 这一个测试文件
 
-# 手工调接口
-
-- 一键跑通全流程（注册 → 登录拿 token → 商品 CRUD → 初始化库存 → 乐观/悲观锁下单 → 错误码 → 并发抢购）：
-  `node scripts/api-smoke.mjs`（Node ≥ 18，用内置 fetch，零依赖不用 npm install；全部断言通过退出码为 0）
-- 单条 curl 速查（可直接复制）：见 [docs/api/curl.md](docs/api/curl.md)
-
-# 并发压测：乐观锁 vs 悲观锁
-
-30 件库存、100 个用户同时开抢，打印耗时分布与最终一致性校验。两个脚本共用
-`scripts/lib/bench-core.mjs`，都是零依赖（Node ≥ 18 内置 fetch）：
-
-```bash
-node scripts/bench-optimistic.mjs             # 乐观锁：version 版本号
-node scripts/bench-pessimistic.mjs            # 悲观锁：SELECT ... FOR UPDATE
-
-node scripts/bench-optimistic.mjs --retry 5   # 客户端遇 3005 最多重试 5 次
-node scripts/bench-optimistic.mjs --stock 50 --users 200 --qty 2
-node scripts/bench-pessimistic.mjs --keep     # 压完保留商品，便于手工查库存
-```
-
-用「发令枪」模式（所有协程先挂在同一个 Promise 上再一次性放行）保证请求真正同时发出，
-实测发压窗口约 10ms。压完自动校验不超卖、库存账实相符。
-
-本机实测（30 件库存 / 100 并发 / 每人 1 件）：
-
-| 方案 | 墙钟耗时 | 成功 | 3005 冲突 | 库存剩余 | 实际请求数 |
-| --- | --- | --- | --- | --- | --- |
-| 乐观锁（不重试） | ~300-400 ms | 10~11 单 | 89~90 单 | **卖不掉 19~20 件** | 100 |
-| 乐观锁（--retry 5） | ~1090 ms | 30 单 | 0 | 0 | **369（放大 3.7x）** |
-| 悲观锁 | ~721 ms | 30 单 | 0 | 0 | 100 |
-
-几个值得注意的点：
-
-- **乐观锁不重试会大量少卖**。100 个人抢同一行，两次读写之间版本必然被改，
-  成功率只有 10% 左右，20 件库存砸手里。乐观锁必须配重试才是完整方案。
-- **这个场景下悲观锁反而更优**：721ms 卖光 30 件，比带重试的乐观锁（1090ms、369 次请求）
-  又快又省。乐观锁的优势在低冲突场景，这种「所有人抢同一行」的秒杀是它最差的战场。
-- 悲观锁耗时直方图呈**双峰**：先抢到锁的 30 单在 79~600ms 渐进爬升，
-  后 70 单集中堆在 606~712ms 尾部——它们得排队等到自己才发现库存已空。
-- 应用没配 Hikari `maximum-pool-size`（默认 **10**），所以测到的排队是
-  「连接池排队 + 行锁排队」的叠加，不是纯粹的锁竞争。
-
-# 清库
-
-造完测试数据想回到干净状态时用（只要 mysql 容器在跑就行，不用装 mysql 客户端）：
-
-```bash
-node scripts/db-reset.mjs              # 交互确认后清空所有表（保留表结构，自增 ID 归 1）
-node scripts/db-reset.mjs --yes        # 跳过确认
-node scripts/db-reset.mjs --dry-run    # 只看会执行哪些 SQL，不落库
-node scripts/db-reset.mjs --tables orders,stock --yes   # 只清指定表
-node scripts/db-reset.mjs --drop --yes # 连表结构一起删，之后重启应用由 schema.sql 重建
-```
-
-> 排查提示：`TRUNCATE` 之后直接查 `information_schema.tables` 的 `AUTO_INCREMENT` / `TABLE_ROWS`
-> 会看到**旧值**——MySQL 8.0 默认 `information_schema_stats_expiry=86400`，统计信息缓存 24 小时。
-> 要拿实时值得先 `SET SESSION information_schema_stats_expiry=0;`，或者直接 `SELECT COUNT(*)`。
-
 # 01-scaffold-and-local-infra.md
 
 这个任务跑完了解了 Spring boot 的入口文件(EcommerceApplication.java)，代码组织方式，扫描方式，以及 resources 的作用。
@@ -91,11 +33,16 @@ node scripts/db-reset.mjs --drop --yes # 连表结构一起删，之后重启应
 
 # 03-product-db.md
 
-1. VERSION 乐观锁
-    我感觉不会发生数据冲突的情况，因此大家都可以先 select 拿到 version1。再 update 的时候在校验是否还是 version1。是就正常执行，不是就失败。我添加了 bench-optimistic.mjs 并发测试文件。大概是一件商品 30 个库存，100 个人并发争抢。结果大概是会有 10-11 个人成功，89-90 个人并发失败，此时库存没有消耗干净。这个数量我分析了一下是因为连接池大概是 10 个。每次十个算一批，因此成功率是 10%。加入重试机制之后库存都消耗成功，但是他消耗了更多的请求次数和整体耗时。
+1. 早期 VERSION 乐观锁（已弃用，代码现改为 CAS）
+    我感觉不会发生数据冲突的情况，因此大家都可以先 select 拿到版本号 v1。再 update 的时候在校验是否还是 v1。是就正常执行，不是就失败。我添加了 bench-optimistic.mjs 并发测试文件。大概是一件商品 30 个库存，100 个人并发争抢。结果大概是会有 10-11 个人成功，89-90 个人并发失败，此时库存没有消耗干净。这个数量我分析了一下是因为连接池大概是 10 个。每次十个算一批，因此成功率是 10%。加入重试机制之后库存都消耗成功，但是他消耗了更多的请求次数和整体耗时。
 2. CAS 乐观锁 
     这是典型的适合去库存的场景，不再用 version 来判断是否并发请求了，而是改用库存数量。这样只要有库存即使并发了也不要紧，只要库存充足就会成功。是测试下来最理想的情况
 3. 悲观锁 
-    他跟乐观锁的区别是，在 select 拿到 version1 的这一步就阻止了另外一个人再继续执行这个，因此他自始至终到 update 都会成功。劣势就是不能够并行 select。因此耗时会增加不少
-
+    他跟乐观锁的区别是，在 select 拿到库存行并加锁的这一步就阻止了另外一个人再继续执行这个（其余事务在行锁上排队），因此他自始至终到 update 都会成功。劣势就是不能够并行 select。因此耗时会增加不少
+4. InnoDB：这种数据引擎支持事务、行级锁、聚族索引、崩溃恢复。老的索引 MyISAM 不支持事务，是表级锁。
+5. MVCC：多版本并发控制(Multi-Version Concurrency Control)。实现了读写不阻塞的功能，例如我查询 select1，然后在执行 update select2。我会将 select1 保存的 undo log 中。这个时候别人在读的时候就可以从 undo log 读取到 select1 的版本。我 update select2 在新的版本中就不会阻塞
+6. 聚族索引：老的索引方式是索引单独一个文件，内容单独一个文件。找到索引文件了还需要再去寻找内容，时间缓慢。聚族索引是索引即数据，找到索引就找到了数据所以快很多
+7. InnoDB 索引 B + 树：这种类似的还有 B 树，二叉树，平衡二叉树。然后呢俩种二叉树由于层级太多，导致 IO 太多，而数据库的瓶颈就是 IO 查询导致的。因此这俩种都不适合做数据库引擎。而 B+ 树比 B 树牛的地方有俩点：1 B+ 树非叶子节点不存储数据，这就可以让一页数据存储更多的节点减少 IO 数量。2 呢就是叶子之间有关联关系再做 between and 这种情况可以直接查询，而不需要从头遍历。
+8. 查询语句前面添加 EXPLAN，不执行具体 SQL，而是进行分析，例如 type = xx。来看有没有走索引，ref 的索引是否正确，以及多表情况分析哪个表先查等等。还可以锁定 rows 的行数
+9. 间隙锁、临时锁还是没太搞明白。TODO
     
