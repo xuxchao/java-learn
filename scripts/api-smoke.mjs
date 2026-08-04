@@ -64,7 +64,8 @@ async function api(method, path, { body, auth = true, timeout = 10_000 } = {}) {
     } catch {
       /* 非 JSON（比如 Tomcat 的 HTML 错误页），保留原文 */
     }
-    return { ok: true, status: res.status, text, json, code: json?.code, data: json?.data };
+    return { ok: true, status: res.status, text, json, code: json?.code, data: json?.data,
+      headers: Object.fromEntries(res.headers) };
   } catch (err) {
     return { ok: false, status: 0, text: String(err.message ?? err), json: null, code: undefined, data: undefined };
   }
@@ -130,8 +131,14 @@ async function main() {
   }
   console.log(`  ${green(`PID = ${pid}`)}`);
 
-  step(`4. 商品详情 GET /products/${pid}`);
+  step(`4. 商品详情 GET /products/${pid}（首次应 MISS，回填缓存）`);
   await call('GET', `/products/${pid}`);
+
+  step(`4b. 商品详情再次 GET /products/${pid}（应命中缓存 X-Cache: HIT）`);
+  const hit = await api('GET', `/products/${pid}`);
+  assert('第二次读命中缓存（X-Cache: HIT）',
+    hit.headers?.['x-cache'] === 'HIT',
+    `实到 X-Cache=${hit.headers?.['x-cache']}`);
 
   step(`5. 更新商品 PUT /products/${pid}`);
   await call('PUT', `/products/${pid}`, {

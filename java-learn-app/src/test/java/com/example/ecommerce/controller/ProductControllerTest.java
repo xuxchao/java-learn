@@ -1,12 +1,12 @@
 package com.example.ecommerce.controller;
 
+import com.example.ecommerce.cache.ProductCacheService;
 import com.example.ecommerce.common.Result;
 import com.example.ecommerce.model.Order;
 import com.example.ecommerce.model.Product;
 import com.example.ecommerce.security.JwtUtil;
 import com.example.ecommerce.service.LockType;
 import com.example.ecommerce.service.OrderService;
-import com.example.ecommerce.service.ProductService;
 import io.jsonwebtoken.Claims;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +24,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -32,9 +33,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 因此 WebConfig + LoginInterceptor 会被加载但其依赖的 JwtUtil（普通 @Component）不在切片内，
  * 必须 @MockBean 掉，否则上下文启动报 "No qualifying bean of type JwtUtil"。
  *
- * <p>/products/** 受登录拦截器保护，故每个请求都带 {@code Authorization: Bearer fake} 头，
- * 并把 JwtUtil.parse 打桩返回合法 Claims（sub=7 / role=USER），让拦截器放行。
- * Service 层用 mock 替身，不连库。
+ * <p>商品读写现已委托给 {@link ProductCacheService}，故这里 mock 它（不再 mock ProductService）。
+ * Service 层用 mock 替身，不连库。GET /products/{id} 校验 {@code X-Cache} 头（HIT/MISS）。
  */
 @WebMvcTest(ProductController.class)
 class ProductControllerTest {
@@ -43,7 +43,7 @@ class ProductControllerTest {
     private MockMvc mockMvc;
 
     @MockBean
-    private ProductService productService;
+    private ProductCacheService productCacheService;
 
     @MockBean
     private OrderService orderService;
@@ -62,7 +62,7 @@ class ProductControllerTest {
     @Test
     void list_returns_success_body() throws Exception {
         stubAuth();
-        when(productService.listProducts()).thenReturn(List.of(new Product("手机", new BigDecimal("1999"), "desc")));
+        when(productCacheService.listProducts()).thenReturn(List.of(new Product("手机", new BigDecimal("1999"), "desc")));
         mockMvc.perform(get("/products").header("Authorization", "Bearer fake"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
@@ -70,10 +70,34 @@ class ProductControllerTest {
     }
 
     @Test
+    void get_product_miss_sets_x_cache_header() throws Exception {
+        stubAuth();
+        Product p = new Product("手机", new BigDecimal("1999"), "desc");
+        when(productCacheService.getProductWithCacheInfo(1L))
+                .thenReturn(new ProductCacheService.CacheResult(p, false));
+        mockMvc.perform(get("/products/1").header("Authorization", "Bearer fake"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(header().string("X-Cache", "MISS"));
+    }
+
+    @Test
+    void get_product_hit_sets_x_cache_header() throws Exception {
+        stubAuth();
+        Product p = new Product("手机", new BigDecimal("1999"), "desc");
+        when(productCacheService.getProductWithCacheInfo(1L))
+                .thenReturn(new ProductCacheService.CacheResult(p, true));
+        mockMvc.perform(get("/products/1").header("Authorization", "Bearer fake"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(header().string("X-Cache", "HIT"));
+    }
+
+    @Test
     void create_product_returns_created() throws Exception {
         stubAuth();
         Product created = new Product("手机", new BigDecimal("1999"), "desc");
-        when(productService.createProduct("手机", new BigDecimal("1999"), "desc")).thenReturn(created);
+        when(productCacheService.createProduct("手机", new BigDecimal("1999"), "desc")).thenReturn(created);
         mockMvc.perform(post("/products")
                         .header("Authorization", "Bearer fake")
                         .contentType("application/json")

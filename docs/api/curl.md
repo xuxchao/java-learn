@@ -123,6 +123,37 @@ curl -s -X DELETE http://localhost:8080/products/$PID -H "Authorization: Bearer 
 
 ---
 
+## 2.5 商品缓存（M4）
+
+商品详情读取已接 Redis 缓存（`ProductCacheService`）。每个 `GET /products/{id}` 会返回
+`X-Cache` 响应头，直观区分是否命中缓存：
+
+- `X-Cache: HIT` → 直接读 Redis 返回；
+- `X-Cache: MISS` → 缓存未命中，回源 DB 并回填。
+
+```bash
+# 第一次读（MISS，回填缓存）
+curl -s -i http://localhost:8080/products/$PID -H "Authorization: Bearer $TOKEN" | grep -i x-cache
+# 第二次读（HIT）
+curl -s -i http://localhost:8080/products/$PID -H "Authorization: Bearer $TOKEN" | grep -i x-cache
+```
+
+三大问题防护（代码落地，详见 `docs/cache-notes.md`）：
+
+- **缓存穿透**：不存在的 ID 先被布隆过滤器拦截（直接 3001），漏网的空结果再缓存 60s 短 TTL。
+- **缓存击穿**：热点 key 失效瞬间用 Redis 分布式锁做 single-flight（互斥），另对逻辑过期的 key 返回旧值并异步刷新。
+- **缓存雪崩**：写缓存时 TTL = 30min 基准 + 0~10min 随机抖动，避免集体失效。
+- **一致性**：更新 / 删除商品后"先更 DB 再删缓存 + 延迟双删"。
+
+验证穿透（查不存在的 ID，布隆过滤器直接拦截，不会回源）：
+
+```bash
+curl -s http://localhost:8080/products/999999 -H "Authorization: Bearer $TOKEN"
+# → {"code":3001,"message":"商品不存在"}
+```
+
+---
+
 ## 3. 库存（M3）
 
 ### 初始化库存（`available = total`，只能初始化一次）
