@@ -39,9 +39,9 @@ public class ProductCacheService {
     public static final String CACHE_KEY_PREFIX = "product:";
 
     /** 物理 TTL 基准：30 分钟 */
-    private static final long PHYSICAL_TTL_BASE_SECONDS = 1 * 60;
+    private static final long PHYSICAL_TTL_BASE_SECONDS = 30 * 60;
     /** 物理 TTL 随机抖动：0~10 分钟，避免大量 key 同一时刻集体失效（防雪崩） */
-    private static final long PHYSICAL_TTL_JITTER_SECONDS = 1 * 60;
+    private static final long PHYSICAL_TTL_JITTER_SECONDS = 10 * 60;
     /** 逻辑 TTL：值物理仍存活，但逻辑上过期即触发异步刷新（击穿-逻辑过期方案） */
     private static final long LOGICAL_TTL_SECONDS = 30;
     /** 空值缓存 TTL：很短，防止对不存在 ID 的反复回源（防穿透） */
