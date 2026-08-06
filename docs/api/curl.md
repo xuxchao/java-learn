@@ -280,6 +280,37 @@ curl -s -X POST http://localhost:8080/products/$PID/stock \
 
 ---
 
+## 7. 接口幂等（M5）
+
+演示 token 幂等方案（`com.example.ecommerce.idempotency`）。端点 `POST /idempotency/echo`
+不在登录拦截范围内，无需 Bearer token；但必须带 `Idempotency-Key` 头，相同 key 的重复请求
+只会被真正处理一次。响应头 `Idempotency-Replayed: true/false` 标识是否命中重放。
+
+```bash
+# 第一次（首次执行，executionSeq=1，Replayed=false）
+curl -s -i -X POST http://localhost:8080/idempotency/echo \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: req-001" \
+  -d '{"message":"hello"}' | grep -i -E "Idempotency-Replayed|executionSeq"
+
+# 第二次用同一个 key（重放：不重新执行，executionSeq 仍是 1，Replayed=true）
+curl -s -i -X POST http://localhost:8080/idempotency/echo \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: req-001" \
+  -d '{"message":"hello"}' | grep -i -E "Idempotency-Replayed|executionSeq"
+
+# 缺 Idempotency-Key 头 → 3007
+curl -s -X POST http://localhost:8080/idempotency/echo \
+  -H "Content-Type: application/json" \
+  -d '{"message":"hello"}'
+# → {"code":3007,"message":"请求缺少 Idempotency-Key 头（幂等键必填）"}
+```
+
+> 原理与另外两种幂等方式（DB 唯一索引 `orders.order_no` / 订单状态机）见 `docs/concurrency-notes.md` 第 6 节。
+> 并发扣库存的三种 JVM 方案（synchronized / ReentrantLock / CAS）见 `com.example.ecommerce.concurrency` 包与同文档第 5 节。
+
+---
+
 ## Windows 注意事项
 
 - **推荐用 Git Bash 执行**，上面的命令原样可用。

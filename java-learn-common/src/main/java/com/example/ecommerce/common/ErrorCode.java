@@ -29,7 +29,8 @@ public enum ErrorCode {
     STOCK_ALREADY_INITIALIZED(3003, "库存已初始化"),
     STOCK_NOT_ENOUGH(3004, "库存不足"),
     STOCK_CONFLICT(3005, "库存并发冲突，请重试"),
-    ORDER_CREATE_FAILED(3006, "下单失败");
+    ORDER_CREATE_FAILED(3006, "下单失败"),
+    IDEMPOTENCY_KEY_REQUIRED(3007, "请求缺少 Idempotency-Key 头（幂等键必填）");
 
     private final int code;
     private final String message;

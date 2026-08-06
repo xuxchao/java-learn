@@ -50,6 +50,13 @@
 
 # 04-cache.md
 
-1. 击穿：缓存失效，大量并发请求直接绕过 redis 访问 db
+1. 击穿：缓存失效，大量并发请求直接绕过 redis 访问 db。可以让他先访问老的数据，然后异步刷新 DB
 2. 穿透：id 不存在，直接绕过 redis 访问 db。这里采用了布隆过滤器来判断 id 是否存在的问题。有几个细节需要注意一下，第一个是目前获取了所有数据然后把 id 放进去进行的判断，这个商品多了会导致内存爆炸，正确的做法是需要设置滚动分页慢慢加入。
-3. 雪崩：大量缓存失效，直接访问 db。
+3. 雪崩：大量缓存失效，直接访问 db。通过 TTL 不同的时间 + 集群来处理
+
+# 05-concurrency.md
+
+1. JVM 层并发扣库存三种方案对比：synchronized（监视器锁，阻塞，最简单）/ ReentrantLock（显式锁，可超时/公平，须 finally 解锁）/ AtomicInteger CAS（乐观无锁自旋，低争用最快、高争用空转）。关键认知：**JVM 锁只在单实例内有效**，多实例要靠 DB/Redis 的 CAS（M3 下单就是 DB 层 CAS）。
+2. 压测用"发令枪"（CountDownLatch 拦住所有线程，一声令下同时放行）确保真并发；100 线程各扣 1，三方案都能做到终态归零、成功数=初始、绝不为负（不超卖、不丢更新）。
+3. volatile 只保证可见性+有序性，**不保证原子性**，`i++` 仍会丢更新（用 AtomicInteger）。线程池七大参数：core/max/keepAlive/unit/queue/threadFactory/handler；任务流转 核心→队列→临时→拒绝；四拒绝策略 AbortPolicy/CallerRunsPolicy/DiscardPolicy/DiscardOldestPolicy（本项目 AsyncConfig 用 CallerRunsPolicy 反压）。
+4. 接口幂等三方案：①token（本项目 IdempotencyService，claim/complete 两阶段 + Redis SET NX EX，重放不重执行，演示端点 POST /idempotency/echo）②DB 唯一索引（orders.order_no 唯一，重复插入直接失败）③状态机（订单 CREATED→PAID 用 guard 拒绝重复支付）。生产常组合使用。
