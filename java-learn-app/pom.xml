@@ -47,6 +47,14 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- 热加载：devtools（修改代码后自动重启；监听 target/classes，配合 IDE 保存即编译） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
+
         <!-- M2 鉴权：JWT（签发/校验登录态） -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
@@ -94,6 +102,10 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <!-- devtools 依赖 fork=true 才能在独立进程里监听 classpath 变化并重启 -->
+                    <fork>true</fork>
+                </configuration>
             </plugin>
         </plugins>
     </build>

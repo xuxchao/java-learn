@@ -2,6 +2,13 @@ spring:
   application:
     name: java-learn-app
 
+  # ---- 控制台 ANSI 颜色：强制开启，让 ERROR/WARN/INFO/DEBUG 在终端区分颜色 ----
+  # 默认 DETECT 在 mvn spring-boot:run 下探测过早会判定为不支持，导致日志单色；
+  # 设为 ALWAYS 后不受探测顺序影响（终端本身已支持 ANSI，Maven 的 BUILD SUCCESS 即证明）。
+  output:
+    ansi:
+      enabled: ALWAYS
+
   # ---- MySQL（M3 正式接入；M1 仅用于验证连接；M2 用 schema.sql 建 users 表） ----
   datasource:
     url: jdbc:mysql://localhost:3306/ecommerce?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true

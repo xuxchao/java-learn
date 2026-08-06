@@ -14,6 +14,9 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;   // 加这两行
+
 /**
  * 商品缓存服务（M4 缓存 & 三大问题）。
  *
@@ -36,9 +39,9 @@ public class ProductCacheService {
     public static final String CACHE_KEY_PREFIX = "product:";
 
     /** 物理 TTL 基准：30 分钟 */
-    private static final long PHYSICAL_TTL_BASE_SECONDS = 30 * 60;
+    private static final long PHYSICAL_TTL_BASE_SECONDS = 1 * 60;
     /** 物理 TTL 随机抖动：0~10 分钟，避免大量 key 同一时刻集体失效（防雪崩） */
-    private static final long PHYSICAL_TTL_JITTER_SECONDS = 10 * 60;
+    private static final long PHYSICAL_TTL_JITTER_SECONDS = 1 * 60;
     /** 逻辑 TTL：值物理仍存活，但逻辑上过期即触发异步刷新（击穿-逻辑过期方案） */
     private static final long LOGICAL_TTL_SECONDS = 30;
     /** 空值缓存 TTL：很短，防止对不存在 ID 的反复回源（防穿透） */
@@ -55,6 +58,7 @@ public class ProductCacheService {
     private final ProductIdBloomFilter bloomFilter;
     private final RedisLock redisLock;
     private final ApplicationEventPublisher eventPublisher;
+    private static final Logger log = LoggerFactory.getLogger(ProductService.class);  // 加这行
 
     /** 单实例下的本地互斥锁：Redis 锁没抢到时的兜底 single-flight，保证本实例内不重复回源 */
     private final ConcurrentHashMap<String, Object> localLocks = new ConcurrentHashMap<>();
@@ -84,6 +88,7 @@ public class ProductCacheService {
     public CacheResult getProductWithCacheInfo(Long id) {
         // 1) 布隆过滤器：一定不存在 → 直接拦截（穿透防护-布隆过滤器，无假阴性）
         if (!bloomFilter.mightContain(id)) {
+            log.warn("触发布隆过滤器， id 不存在: {}", id);
             throw new ApiException(ErrorCode.PRODUCT_NOT_FOUND);
         }
 
@@ -93,10 +98,12 @@ public class ProductCacheService {
         // 2) 命中（含空值缓存命中）
         if (env != null) {
             if (env.isNullValue()) {
+                log.warn("命中空值缓存， id 不存在: {}", id);
                 throw new ApiException(ErrorCode.PRODUCT_NOT_FOUND); // 命中"空值缓存"（穿透防护）
             }
             // 逻辑过期：物理仍存活，但逻辑寿命到了 → 返回旧值 + 异步刷新（击穿-逻辑过期）
             if (env.getLogicalExpireAt() > 0 && System.currentTimeMillis() > env.getLogicalExpireAt()) {
+                log.warn("~~逻辑过期，异步刷新缓存: {}", id);
                 eventPublisher.publishEvent(new RefreshCacheEvent(id));
             }
             return new CacheResult(env.getData(), true); // 正常缓存命中
@@ -201,7 +208,9 @@ public class ProductCacheService {
         try {
             Product product = productService.getProduct(id); // 不存在会抛 PRODUCT_NOT_FOUND
             CacheEnvelope env = CacheEnvelope.of(product, logicalExpireAt());
-            redis.opsForValue().set(key, env, randomPhysicalTtlSeconds(), TimeUnit.SECONDS);
+            long physicalTtl = randomPhysicalTtlSeconds();
+            log.warn("缓存时间是: {}", physicalTtl);
+            redis.opsForValue().set(key, env, physicalTtl, TimeUnit.SECONDS);
             return new CacheResult(product, false);
         } catch (ApiException ex) {
             if (ex.getCode() == ErrorCode.PRODUCT_NOT_FOUND.getCode()) {
