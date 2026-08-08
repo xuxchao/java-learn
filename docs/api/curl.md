@@ -311,6 +311,58 @@ curl -s -X POST http://localhost:8080/idempotency/echo \
 
 ---
 
+## 8. 下单异步化 & 消息队列（M6）
+
+下单成功后，系统会把 `OrderCreatedEvent` 发到 RabbitMQ（`order.exchange` → `order.created.queue`），
+后台 `@RabbitListener` 异步消费，发送订单通知（日志代表）等可幂重入的副作用，并打日志
+（注意：消费者**不写 `orders.status`**，避免与 M7 的 `CREATED → PAID` 状态机冲突；库存已在 M3 扣掉）。
+消费者用 `orderNo` 做幂等（复用 M5 的 Redis 幂等键），**重复投递只处理一次**。
+
+### 正常下单（观察 MQ 异步处理）
+
+```bash
+# 先确保该商品有库存（M3）
+curl -s -X POST http://localhost:8080/products/$PID/stock \
+  -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
+  -d '{"total":10}' > /dev/null
+
+# 下单（订单落库 + 发 MQ 消息）
+curl -s -X POST http://localhost:8080/products/$PID/order \
+  -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
+  -d '{"userId":1,"quantity":1}'
+```
+
+下单接口返回后，看应用日志会出现两行：
+
+```
+[MQ] 已发布下单事件: orderNo=ORD...
+[MQ] 收到下单事件: orderNo=ORD...        ← 消费者异步收到
+[MQ] 已发送订单通知 orderNo=ORD..., userId=1, productId=..., qty=1   ← 下游副作用
+[MQ] 首次处理完成: orderNo=ORD..., result=notified:ORD...
+```
+
+### 验证"不重"：手动重投同一条消息
+
+用 `rabbitmqadmin`（或 Management 后台）把同一条事件再发一次，消费者会去重：
+
+```bash
+# 用 Docker 里自带的 rabbitmqadmin 重投一条（orderNo 改成你刚才实际拿到的）
+docker exec java-learn-rabbitmq sh -c \
+  "rabbitmqadmin publish exchange=order.exchange routing_key=order.created \
+   payload='{\"orderNo\":\"ORD实际值\",\"userId\":1,\"productId\":$PID,\"quantity\":1,\"amount\":399.0}'" \
+  > /dev/null 2>&1 || echo "需先 enable rabbitmqadmin（见下）"
+
+# 重投后日志应出现：
+# [MQ] 重复投递已去重（不重复处理）: orderNo=ORD...
+```
+
+> 若 `rabbitmqadmin` 不可用：进 Management 后台（http://localhost:15672，guest/guest）→
+> Queues → `order.created.queue` → Publish message，手动填同样的 `orderNo` 即可验证去重。
+
+八股讲解（不丢 / 不重 / 有序 / 事务消息）见 `docs/mq-notes.md`。
+
+---
+
 ## Windows 注意事项
 
 - **推荐用 Git Bash 执行**，上面的命令原样可用。

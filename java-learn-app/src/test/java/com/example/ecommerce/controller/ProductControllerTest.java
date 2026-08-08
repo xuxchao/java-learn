@@ -4,6 +4,7 @@ import com.example.ecommerce.cache.ProductCacheService;
 import com.example.ecommerce.common.Result;
 import com.example.ecommerce.model.Order;
 import com.example.ecommerce.model.Product;
+import com.example.ecommerce.mq.OrderEventPublisher;
 import com.example.ecommerce.security.JwtUtil;
 import com.example.ecommerce.service.LockType;
 import com.example.ecommerce.service.OrderService;
@@ -47,6 +48,9 @@ class ProductControllerTest {
 
     @MockBean
     private OrderService orderService;
+
+    @MockBean
+    private OrderEventPublisher orderEventPublisher;
 
     @MockBean
     private JwtUtil jwtUtil;

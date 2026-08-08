@@ -5,6 +5,8 @@ import com.example.ecommerce.common.Result;
 import com.example.ecommerce.model.Order;
 import com.example.ecommerce.model.Product;
 import com.example.ecommerce.model.Stock;
+import com.example.ecommerce.mq.OrderCreatedEvent;
+import com.example.ecommerce.mq.OrderEventPublisher;
 import com.example.ecommerce.service.LockType;
 import com.example.ecommerce.service.OrderService;
 import jakarta.servlet.http.HttpServletResponse;
@@ -45,10 +47,14 @@ public class ProductController {
 
     private final ProductCacheService productCacheService;
     private final OrderService orderService;
+    private final OrderEventPublisher orderEventPublisher;
 
-    public ProductController(ProductCacheService productCacheService, OrderService orderService) {
+    public ProductController(ProductCacheService productCacheService,
+                             OrderService orderService,
+                             OrderEventPublisher orderEventPublisher) {
         this.productCacheService = productCacheService;
         this.orderService = orderService;
+        this.orderEventPublisher = orderEventPublisher;
     }
 
     public record CreateProductRequest(String name, BigDecimal price, String description) {
@@ -106,6 +112,8 @@ public class ProductController {
                                @RequestBody OrderRequest req) {
         LockType lockType = (req.lockType() == null) ? LockType.OPTIMISTIC : req.lockType();
         Order order = orderService.placeOrder(req.userId(), id, req.quantity(), lockType);
+        // M6：订单落库成功后发消息到 MQ，下游异步处理（削峰 / 解耦）。幂等由消费者侧保证。
+        orderEventPublisher.publish(OrderCreatedEvent.from(order));
         return Result.success(order);
     }
 }

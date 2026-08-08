@@ -30,6 +30,10 @@ spring:
     port: 5672
     username: guest
     password: guest
+    # 不丢：开启生产者确认（broker 落盘后回调 ack）；correlated 才能拿到 ConfirmCallback
+    publisher-confirm-type: correlated
+    # 不丢：消息无法路由到队列时退回（配合 mandatory=true 触发 ReturnsCallback）
+    publisher-returns: true
 
   # ---- SQL 初始化：每次启动用 classpath:schema.sql 幂等建表（M2 的 users 表 + M3 的 products/stock/orders） ----
   sql:
