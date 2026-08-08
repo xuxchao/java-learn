@@ -27,6 +27,17 @@ services:
       timeout: 5s
       retries: 5
 
+  redis-insight:
+    image: redis/redisinsight:3.8
+    container_name: java-learn-redis-insight
+    ports:
+      - "5540:5540"
+    volumes:
+      - redis-insight-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+
   rabbitmq:
     image: rabbitmq:3.13-management
     container_name: java-learn-rabbitmq
@@ -41,3 +52,4 @@ services:
 
 volumes:
   mysql-data:
+  redis-insight-data:

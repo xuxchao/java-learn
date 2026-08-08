@@ -48,10 +48,12 @@ docker-compose up -d
 cd middleware-examples
 
 # 跑 Redis 全部例子（激活 redis profile）
-sh ../.mvnlocal.sh spring-boot:run -Dspring-boot.run.profiles=redis
+$env:SPRING_PROFILES_ACTIVE='redis'; mvn spring-boot:run
+
 
 # 跑 RabbitMQ 全部例子（激活 rabbitmq profile）
-sh ../.mvnlocal.sh spring-boot:run -Dspring-boot.run.profiles=rabbitmq
+$env:SPRING_PROFILES_ACTIVE='rabbitmq'; mvn spring-boot:run
+
 
 # 只跑某一个例子（按名字单跑）
 sh ../.mvnlocal.sh spring-boot:run -Dspring-boot.run.profiles=redis -Dspring-boot.run.arguments=--example=string
