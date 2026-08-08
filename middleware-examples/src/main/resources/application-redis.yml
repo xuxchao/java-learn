@@ -1,0 +1,6 @@
+# 仅在 redis profile 激活时加载。
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379

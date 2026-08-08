@@ -1,0 +1,10 @@
+spring:
+  application:
+    name: middleware-examples
+  # 非 web 应用：CommandLineRunner 跑完即退出（exit code 0）
+  main:
+    web-application-type: none
+
+logging:
+  level:
+    root: INFO
