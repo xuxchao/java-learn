@@ -63,7 +63,7 @@ class IdempotencyServiceTest {
         assertEquals(2, calls.get(), "不同 key 各自执行一次");
     }
 
-    /** TTL 过期后可重新执行（演示存储过期语义）。 */
+    /** TTL 过期后，幂等窗口结束；同一个 key 会被当成新请求重新执行。 */
     @Test
     void expired_key_can_execute_again() throws InterruptedException {
         // TTL=1 秒，便于快速观察过期
@@ -74,8 +74,8 @@ class IdempotencyServiceTest {
         Thread.sleep(1200); // 等过期
         IdempotencyResult<String> again = svc.execute("k1", String.class, () -> { calls.incrementAndGet(); return "v2"; });
 
-        assertFalse(again.isReplayed(), "过期后视为新请求");
-        assertEquals("v2", again.getValue());
-        assertEquals(2, calls.get(), "过期后动作应重新执行");
+        assertFalse(again.isReplayed(), "TTL 过期后，应把它当成新请求而不是重放");
+        assertEquals("v2", again.getValue(), "TTL 过期后，结果应来自新一轮执行");
+        assertEquals(2, calls.get(), "TTL 过期后动作应重新执行");
     }
 }

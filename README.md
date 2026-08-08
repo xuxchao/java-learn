@@ -53,10 +53,11 @@
 1. 击穿：缓存失效，大量并发请求直接绕过 redis 访问 db。可以让他先访问老的数据，然后异步刷新 DB
 2. 穿透：id 不存在，直接绕过 redis 访问 db。这里采用了布隆过滤器来判断 id 是否存在的问题。有几个细节需要注意一下，第一个是目前获取了所有数据然后把 id 放进去进行的判断，这个商品多了会导致内存爆炸，正确的做法是需要设置滚动分页慢慢加入。
 3. 雪崩：大量缓存失效，直接访问 db。通过 TTL 不同的时间 + 集群来处理
+4. Redis 的使用：提供了一种高效的数据读取，读 db 要过硬盘太慢，redis 直接内存非常的快。有七种数据类型分布对应不同的场景：string：验证码，token，登录会话；hash：用户信息，商品信息；list：日志，消息队列；set：签到，黑名单；zset：热榜，排名，bitmap：海量数据签到，geo：附近门店，附近的人。了解到的扩展玩法有通过 nx ex 进行分布式锁处理。以及不同的恢复方案：RDB: 快照，缺点是每次快照间隔时间会丢数据；AOF：写日志，可以设置写日志频率，最终通过日志恢复数据，有每秒、每次等多种策略
 
 # 05-concurrency.md
 
-1. JVM 层并发扣库存三种方案对比：synchronized（监视器锁，阻塞，最简单）/ ReentrantLock（显式锁，可超时/公平，须 finally 解锁）/ AtomicInteger CAS（乐观无锁自旋，低争用最快、高争用空转）。关键认知：**JVM 锁只在单实例内有效**，多实例要靠 DB/Redis 的 CAS（M3 下单就是 DB 层 CAS）。
-2. 压测用"发令枪"（CountDownLatch 拦住所有线程，一声令下同时放行）确保真并发；100 线程各扣 1，三方案都能做到终态归零、成功数=初始、绝不为负（不超卖、不丢更新）。
-3. volatile 只保证可见性+有序性，**不保证原子性**，`i++` 仍会丢更新（用 AtomicInteger）。线程池七大参数：core/max/keepAlive/unit/queue/threadFactory/handler；任务流转 核心→队列→临时→拒绝；四拒绝策略 AbortPolicy/CallerRunsPolicy/DiscardPolicy/DiscardOldestPolicy（本项目 AsyncConfig 用 CallerRunsPolicy 反压）。
-4. 接口幂等三方案：①token（本项目 IdempotencyService，claim/complete 两阶段 + Redis SET NX EX，重放不重执行，演示端点 POST /idempotency/echo）②DB 唯一索引（orders.order_no 唯一，重复插入直接失败）③状态机（订单 CREATED→PAID 用 guard 拒绝重复支付）。生产常组合使用。
+1. 幂等：类比纯函数，同一个操作调用，不管是执行一次还是 N 次，得到的结果总是一致的。使用的场景有网络波动导致的接口重复请求，一个订单下单多次等等
+2. 状态机：一个事务，在任意时刻只能处于某一个状态，接收到事件之后按照固定的规则，从一个状态切换到另一个状态。这里写代码需要注意不要写 if else 进行判断。要根据状态表判断。例如 MAP 结构
+3. AtomicInteger: 解决多线程原子化操作问题
+4. 锁：这里提到了 synchronized、AtomicInteger、reentrantlock 。跟前面数据库的悲观锁、乐观锁相似。还需要理解 volatile 的一些用法（不管原子化，只管更新。count++ 还是存在竞态问题状态的）
